@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PANAH ACCSESORIES</title>
+<style>
+:root{--pink:#ec4899;--pink2:#f472b6;--light:#fff5fa;--dark:#3b1d2d;--green:#16a34a;--red:#dc2626}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#fff,#fff1f7);font-family:Tahoma,Arial,sans-serif;color:var(--dark)}
+header{background:linear-gradient(135deg,var(--pink),var(--pink2));color:white;text-align:center;padding:28px 15px;border-radius:0 0 28px 28px;box-shadow:0 8px 25px #ec489944}header h1{margin:0;font-size:28px}
+.wrap{max-width:1050px;margin:auto;padding:16px}.bar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}button{border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}.white{background:#fff;box-shadow:0 3px 12px #0001;color:#c02675}.pink{background:linear-gradient(135deg,var(--pink),var(--pink2));color:#fff}.danger{background:#ffe5e5;color:#b91c1c}.green{background:#dcfce7;color:#166534}.statusLegend{background:#fff;border-radius:18px;padding:12px;display:flex;gap:18px;justify-content:center;box-shadow:0 3px 14px #0000000a;margin-bottom:15px}.ok{color:var(--green);font-weight:bold}.no{color:var(--red);font-weight:bold}
+.products{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px}.card{background:#fff;border-radius:20px;padding:11px;box-shadow:0 5px 18px #0000000d}.card img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:15px;background:#eee}.card h3{margin:9px 2px 4px}.desc{font-size:13px;color:#777;min-height:35px}.price{font-weight:bold;color:#d32678;font-size:17px;margin:8px 0}.badge{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px}.badge.ok{background:#dcfce7}.badge.no{background:#fee2e2}.add{width:100%;margin-top:6px}.add:disabled{opacity:.45;cursor:not-allowed}
+.box{background:#fff;border-radius:20px;padding:18px;margin-top:18px;box-shadow:0 5px 20px #0001}.box h2{margin-top:0}.panel{display:none}.panel.show{display:block}input,textarea,select{width:100%;padding:11px;border:1px solid #ead6e0;border-radius:11px;margin:5px 0 10px;font-family:inherit}textarea{min-height:70px;resize:vertical}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.editItem{border:1px solid #f0dce6;padding:12px;border-radius:15px;margin:10px 0}.cartItem,.review{padding:11px 0;border-bottom:1px solid #eee}.cartLine{display:flex;justify-content:space-between;gap:10px;align-items:center}.qty button{padding:6px 10px;background:#eee}.total{font-weight:bold;font-size:19px;margin-top:14px}.review b{color:#c02675}.small{font-size:12px;color:#777}.gallery{background:#fff0f6;padding:10px;border-radius:10px;margin:6px 0}
+@media(max-width:600px){header h1{font-size:23px}.products{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}.card h3{font-size:14px}.price{font-size:15px}}
+</style>
+<script>
+const SUPABASE_URL = "https://lglmaitrcgnkrnuceyrm.supabase.co";
+const SUPABASE_KEY = "sb_publishable_tbbCHc9E5b4ComLUYWdVAA_fV_fsVCb";
+let adminAccessToken = localStorage.getItem('panahAdminAccessToken') || '';
+let adminUserId = localStorage.getItem('panahAdminUserId') || '';
+let ownerAccessToken = localStorage.getItem('panahOwnerAccessToken') || '';
+let ownerUserId = localStorage.getItem('panahOwnerUserId') || '';
+
+async function sbFetch(path, options={}) {
+  const headers = Object.assign({
+    "apikey": SUPABASE_KEY,
+    "Authorization": "Bearer " + (adminAccessToken || SUPABASE_KEY),
+    "Content-Type": "application/json",
+    "Prefer": "return=representation"
+  }, options.headers || {});
+  const res = await fetch(SUPABASE_URL + "/rest/v1/" + path, Object.assign({}, options, {headers}));
+  if (!res.ok) throw new Error(await res.text());
+  return res.status === 204 ? null : res.json();
+}
+
+async function syncProductsToSupabase() {
+  try {
+    const rows = products.map(p => ({
+      name:p.name, price:Number(p.price)||0, description:p.desc||"",
+      image_url:p.img||"", stock:!!p.available
+    }));
+    // This client-side sync is intentionally best-effort; RLS policies must permit writes.
+    await sbFetch("products?select=id", {method:"GET"});
+    for (const p of rows) {
+      await sbFetch("products", {method:"POST", body:JSON.stringify(p)});
+    }
+    return true;
+  } catch(e) {
+    console.warn("Supabase sync not completed:", e);
+    return false;
+  }
+}
+
+
+async function loadPublicStoreSettingsFromSupabase(){
+  return loadStoreSettingsFromSupabase();
+}
+
+async function loadStoreSettingsFromSupabase(){
+  try{
+    const rows=await sbFetch("store_settings?select=id,store_name,tagline,description,whatsapp,telegram,rubika&id=eq.1",{method:"GET"});
+    if(Array.isArray(rows)&&rows.length){
+      const st=rows[0];
+      localStorage.panahStoreName=st.store_name||"PANAH ACCSESORIES";
+      localStorage.panahStoreTag=st.tagline||"اکسسوری‌های خاص برای سلیقه‌های خاص ✨";
+      contacts={wa:st.whatsapp||"",tg:st.telegram||"",rb:st.rubika||""};
+      persist();
+      renderAdmin();
+      return true;
+    }
+  }catch(e){console.warn("Supabase store settings unavailable; using local settings.",e)}
+  return false;
+}
+
+let adminFormDirty=false;
+
+document.addEventListener('input', function(e){
+  if(e.target.closest && e.target.closest('#admin')) adminFormDirty=true;
+});
+
+async function loadProductsFromSupabase(silent=false) {
+  if(adminFormDirty) return false;
+  try {
+    const rows = await sbFetch("products?select=id,name,price,description,image_url,stock&order=id.asc", {method:"GET"});
+    if (Array.isArray(rows) && rows.length > 0) {
+      // Supabase is the single source of truth. Never replace remote products
+      // with the HTML defaults or localStorage contents.
+      products = rows.map(p => ({
+        id:p.id,
+        name:p.name,
+        price:Number(p.price)||0,
+        desc:p.description||"",
+        img:p.image_url||"",
+        available:!!p.stock
+      }));
+      localStorage.panahProducts=JSON.stringify(products);
+      render();
+      return true;
+    }
+
+    // If Supabase is genuinely empty, never erase products already bundled in
+    // this HTML/localStorage. If an admin is logged in, seed those real products
+    // once so every device can read the same list afterwards.
+    if (Array.isArray(rows) && rows.length === 0) {
+      if (Array.isArray(products) && products.length) {
+        if(adminAccessToken){
+          for(const p of products){
+            if(!p.id){
+              try{await syncOneProductToSupabase(p);}catch(e){console.warn('Initial product sync failed:',e)}
+            }
+          }
+          persist();
+        }
+        render();
+        return true;
+      }
+      products=[];
+      localStorage.panahProducts='[]';
+      render();
+      return true;
+    }
+  } catch(e) {
+    if(!silent) console.warn("Supabase products unavailable; using local products.", e);
+  }
+  return false;
+}
+</script>
+
+</head>
+<body>
+<header><h1>PANAH ACCSESORIES</h1></header>
+<div class="wrap">
+<div class="bar"><strong>🛍️ محصولات</strong><div><button class="white" onclick="toggle('cart')">🛒 سبد خرید (<span id="count">0</span>)</button><button class="white" onclick="toggle('account')">👤 حساب</button><button class="white" onclick="toggle('managerPanel')">👑 پنل مدیریت</button><button class="white" onclick="toggle('ownerPanel')">🔐 مالک سایت</button></div></div>
+<div class="statusLegend"><span class="ok">🟢 موجود</span><span class="no">🔴 ناموجود</span></div>
+<section id="products" class="products"></section>
+<section id="cart" class="box" style="display:none"><h2>🛒 سبد خرید</h2>
+<div style="background:#fff0f6;padding:12px;border-radius:14px;margin:10px 0">
+  <b>📩 سفارش از کجا پیگیری شود؟</b>
+  <select id="orderChannel">
+    <option value="whatsapp">واتساپ</option>
+    <option value="telegram">تلگرام</option>
+    <option value="rubika">روبیکا</option>
+  </select>
+</div><div id="cartItems"></div><div class="total">جمع کل: <span id="total">0</span> تومان</div><button class="pink" style="width:100%;margin-top:10px" onclick="checkout()">🧾 ثبت سفارش</button></section>
+<section id="account" class="box" style="display:none"><h2>👤 حساب کاربری</h2><div id="loggedOut"><div class="row"><input id="name" placeholder="نام و نام خانوادگی"><input id="phone" inputmode="numeric" maxlength="11" placeholder="شماره موبایل (مثلاً 09123456789)"></div><input id="pass" type="password" placeholder="رمز عبور"><button class="pink" onclick="loginOrRegister()">ثبت‌نام / ورود</button><div class="small">برای جلوگیری از شماره الکی، قالب و طول شماره بررسی می‌شود؛ تأیید واقعی مالکیت شماره نیاز به کد پیامکی (OTP) دارد.</div></div><div id="loggedIn" style="display:none"></div></section>
+<section class="box"><h2>⭐ نظر کاربران</h2><div id="reviews"></div><textarea id="reviewText" placeholder="نظر خود را بنویسید..."></textarea><button class="pink" onclick="addReview()">ثبت نظر</button></section>
+
+
+<section id="ownerPanel" class="box" style="display:none">
+  <h2>👑 مالک سایت</h2>
+  <p class="small">فقط حسابی که در Supabase به‌عنوان مالک ثبت شده می‌تواند مدیر جدید بسازد یا حذف کند.</p>
+  <div id="ownerLogin">
+    <input id="ownerEmail" type="email" placeholder="ایمیل مالک سایت">
+    <input id="ownerPassword" type="password" placeholder="رمز عبور مالک">
+    <button class="pink" onclick="ownerLogin()">ورود مالک 👑</button>
+  </div>
+  <div id="ownerArea" style="display:none">
+    <div class="box" style="margin-top:10px">
+      <h3>➕ ساخت مدیر جدید</h3>
+      <input id="newManagerEmail" type="email" placeholder="ایمیل مدیر جدید">
+      <input id="newManagerPassword" type="password" placeholder="رمز مدیر جدید (حداقل ۶ کاراکتر)">
+      <button class="pink" onclick="createManager()">ساخت مدیر و فعال‌سازی دسترسی</button>
+      <div class="small">رمز اینجا فقط به Supabase Auth فرستاده می‌شود و داخل HTML ذخیره نمی‌شود.</div>
+    </div>
+    <div class="box" style="margin-top:10px">
+      <h3>👥 مدیران سایت</h3>
+      <div id="managerList">در حال دریافت...</div>
+    </div>
+    <button class="danger" onclick="ownerLogout()">خروج مالک</button>
+  </div>
+</section>
+
+<section id="managerPanel" class="box" style="display:none">
+  <h2>👑 پنل مدیریت PANAH</h2>
+  <p class="small">ورود مدیر با حساب امن Supabase انجام می‌شود؛ فقط مدیرانی که مالک سایت فعال کرده باشد دسترسی دارند.</p>
+  <div id="managerLogin">
+    <input id="managerEmail" type="email" placeholder="ایمیل مدیر">
+    <input id="managerPassword" type="password" placeholder="رمز عبور مدیر">
+    <button class="pink" onclick="managerLogin()">ورود به پنل 👑</button>
+  </div>
+  <div id="managerArea" style="display:none">
+    <p class="small">ورود موفق بود ✅ این حساب به عنوان مدیر ثبت شده است.</p>
+    <button class="danger" onclick="managerLogout()">خروج مدیر</button> <button class="pink" onclick="toggle('admin')">⚙️ ویرایش فروشگاه</button>
+    <section id="admin" class="box panel" style="display:none"><h2>⚙️ ویرایش فروشگاه</h2><p class="small">این پنل برای مدیریت همین نسخه روی همین دستگاه است.</p><div class="row"><div><label>نام فروشگاه</label><input id="storeName" value="PANAH ACCSESORIES"></div><div><label>متن توضیحی</label><input id="storeTag" value="اکسسوری‌های خاص برای سلیقه‌های خاص ✨"></div></div><button class="pink" onclick="saveStore()">💾 ذخیره</button><h3>محصولات</h3><div id="editProducts"></div><button class="pink" onclick="addProduct()">➕ افزودن محصول</button><hr><h3>راه‌های سفارش</h3><input id="wa" placeholder="شماره واتساپ با کد کشور، مثال 98912..."><input id="tg" placeholder="آیدی تلگرام بدون @"><input id="rb" placeholder="آیدی روبیکا بدون @"><button class="pink" onclick="saveContacts()">💾 ذخیره راه‌های سفارش</button></section>
+    <div class="box" style="margin-top:10px">
+      <h3>💬 مدیریت نظرات</h3>
+      <p class="small">نظرات جدید را بررسی و تأیید یا حذف کن.</p>
+      <div id="reviewModeration"></div>
+    </div>
+    <div class="box" style="margin-top:10px">
+      <h3>🧾 سفارش‌ها</h3>
+      <div id="ordersAdmin" class="small">برای مشاهده سفارش‌ها وارد شده‌ای.</div>
+    </div>
+  </div>
+</section>
+
+</div>
+<script>
+const defaults=[
+{name:'دستبند نگین‌دار',price:180000,desc:'دستبند شیک و ظریف',img:'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=700&q=80',available:true},
+{name:'گردنبند مینیمال',price:240000,desc:'مناسب استفاده روزمره',img:'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=700&q=80',available:true},
+{name:'گوشواره ظریف',price:160000,desc:'طراحی ساده و جذاب',img:'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=700&q=80',available:false},
+{name:'انگشتر فانتزی',price:210000,desc:'یک انتخاب خاص برای استایل شما',img:'https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=700&q=80',available:true}];
+let products=JSON.parse(localStorage.panahProducts||'null')||[
+  {name:'تست',price:50000,desc:'تست',img:'',available:true}
+],cart=JSON.parse(localStorage.panahCart||'{}'),users=JSON.parse(localStorage.panahUsers||'[]'),reviews=JSON.parse(localStorage.panahReviews||'[]'),user=JSON.parse(localStorage.panahUser||'null'),contacts=JSON.parse(localStorage.panahContacts||'null')||{wa:'',tg:'',rb:''};
+reviews=reviews.map(r=>({...r,approved:r.approved===true}));
+const money=n=>Number(n).toLocaleString('fa-IR');
+function persist(){localStorage.panahProducts=JSON.stringify(products);localStorage.panahCart=JSON.stringify(cart);localStorage.panahUsers=JSON.stringify(users);localStorage.panahReviews=JSON.stringify(reviews);if(user)localStorage.panahUser=JSON.stringify(user);localStorage.panahContacts=JSON.stringify(contacts)}
+function toggle(id){const e=document.getElementById(id);e.style.display=e.style.display==='none'?'block':'none'}
+function render(){document.getElementById('products').innerHTML=products.map((p,i)=>`<article class="card"><img src="${p.img}" alt=""><span class="badge ${p.available?'ok':'no'}">${p.available?'🟢 موجود':'🔴 ناموجود'}</span><h3>${p.name}</h3><div class="desc">${p.desc}</div><div class="price">${money(p.price)} تومان</div><button class="pink add" ${p.available?'':'disabled'} onclick="add(${i})">${p.available?'افزودن به سبد 🛒':'ناموجود'}</button></article>`).join('');renderCart();renderAdmin();renderAccount();renderReviews();renderReviewModeration();}
+function add(i){cart[i]=(cart[i]||0)+1;persist();renderCart()}
+function change(i,d){cart[i]+=d;if(cart[i]<=0)delete cart[i];persist();renderCart()}
+function renderCart(){let ks=Object.keys(cart),total=0;document.getElementById('count').textContent=ks.reduce((s,k)=>s+cart[k],0);document.getElementById('cartItems').innerHTML=ks.length?ks.map(k=>{let p=products[k];if(!p||!p.available){delete cart[k];return ''}let sub=p.price*cart[k];total+=sub;return `<div class="cartItem"><div class="cartLine"><span>${p.name}<br><small>${money(sub)} تومان</small></span><span class="qty"><button onclick="change(${k},-1)">−</button>${cart[k]}<button onclick="change(${k},1)">+</button></span></div></div>`}).join(''):'سبد خرید خالی است';document.getElementById('total').textContent=money(total)}
+function renderAdmin(){document.getElementById('storeName').value=localStorage.panahStoreName||'PANAH ACCSESORIES';document.getElementById('storeTag').value=localStorage.panahStoreTag||'اکسسوری‌های خاص برای سلیقه‌های خاص ✨';document.getElementById('wa').value=contacts.wa;document.getElementById('tg').value=contacts.tg;document.getElementById('rb').value=contacts.rb;document.getElementById('editProducts').innerHTML=products.map((p,i)=>`<div class="editItem"><b>محصول ${i+1}</b><input id="en${i}" value="${esc(p.name)}" placeholder="نام"><input id="ep${i}" type="number" value="${p.price}" placeholder="قیمت"><textarea id="ed${i}">${esc(p.desc)}</textarea><input id="ei${i}" value="${esc(p.img)}" placeholder="لینک تصویر"><label class="gallery">📸 انتخاب عکس از گالری <input type="file" accept="image/*" onchange="pickImage(event,${i})"></label><select id="ea${i}"><option value="1" ${p.available?'selected':''}>🟢 موجود</option><option value="0" ${!p.available?'selected':''}>🔴 ناموجود</option></select><br><button class="pink" onclick="updateProduct(${i})">💾 ذخیره محصول</button> <button class="danger" onclick="delProduct(${i})">🗑️ حذف</button></div>`).join('')}
+function esc(s){return String(s??'').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;')}
+function pickImage(e,i){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{products[i].img=r.result;persist();render()};r.readAsDataURL(f)}
+function updateProduct(i){products[i]={name:document.getElementById('en'+i).value,price:Number(document.getElementById('ep'+i).value)||0,desc:document.getElementById('ed'+i).value,img:document.getElementById('ei'+i).value,available:document.getElementById('ea'+i).value==='1'};persist();render()}
+function addProduct(){products.push({name:'محصول جدید',price:0,desc:'توضیحات محصول',img:'https://via.placeholder.com/700',available:true});persist();render()}
+function delProduct(i){products.splice(i,1);persist();render()}
+function saveStore(){localStorage.panahStoreName=document.getElementById('storeName').value;localStorage.panahStoreTag=document.getElementById('storeTag').value;persist();alert('اطلاعات ذخیره شد ✅')}
+function saveContacts(){contacts={wa:document.getElementById('wa').value.trim(),tg:document.getElementById('tg').value.trim().replace('@',''),rb:document.getElementById('rb').value.trim().replace('@','')};persist();alert('راه‌های سفارش ذخیره شد ✅')}
+function normalizeDigits(v){return String(v||'').replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/\s|[-()]/g,'');}
+function validIranPhone(v){let p=normalizeDigits(v);return /^(09\d{9})$/.test(p);}
+function loginOrRegister(){let n=document.getElementById('name').value.trim(),p=normalizeDigits(document.getElementById('phone').value),pw=document.getElementById('pass').value;if(!n||!p||!pw)return alert('همه اطلاعات را وارد کنید.');if(n.length<2)return alert('نام معتبر وارد کنید.');if(!validIranPhone(p))return alert('شماره موبایل معتبر ایران وارد کنید؛ مثل 09123456789.');if(pw.length<6)return alert('رمز عبور باید حداقل ۶ کاراکتر باشد.');let u=users.find(x=>normalizeDigits(x.phone)===p);if(u&&u.pass!==pw)return alert('رمز عبور نادرست است.');if(!u){u={name:n,phone:p,pass:pw};users.push(u)}user=u;persist();renderAccount();alert('ورود/ثبت‌نام انجام شد ✅');}
+function renderAccount(){let a=document.getElementById('loggedOut'),b=document.getElementById('loggedIn');if(user){a.style.display='none';b.style.display='block';b.innerHTML=`سلام ${esc(user.name)} 👋<br><small>${esc(user.phone)}</small><br><button class="danger" onclick="logout()">خروج</button>`}else{a.style.display='block';b.style.display='none'}}
+function logout(){user=null;localStorage.removeItem('panahUser');renderAccount()}
+function addReview(){if(!user)return alert('ابتدا ثبت‌نام یا ورود کنید.');let t=document.getElementById('reviewText').value.trim();if(!t)return alert('نظر را بنویسید.');if(t.length<3)return alert('نظر خیلی کوتاه است.');reviews.unshift({name:user.name,text:t,date:new Date().toLocaleDateString('fa-IR'),approved:false});document.getElementById('reviewText').value='';persist();renderReviews();renderReviewModeration();alert('نظر ثبت شد و بعد از تأیید مدیر نمایش داده می‌شود ✅')}
+function renderReviews(){let shown=reviews.filter(r=>r.approved);document.getElementById('reviews').innerHTML=shown.length?shown.map(r=>`<div class="review"><b>⭐ ${esc(r.name)}</b><div>${esc(r.text)}</div><small>${esc(r.date||'')}</small></div>`).join(''):'هنوز نظر تأییدشده‌ای نمایش داده نشده است.'}
+function renderReviewModeration(){let box=document.getElementById('reviewModeration');if(!box)return;box.innerHTML=reviews.length?reviews.map((r,i)=>`<div class="editItem"><b>${esc(r.name)}</b> ${r.approved?'🟢 نمایش داده می‌شود':'🟡 در انتظار تأیید'}<div style="margin:8px 0">${esc(r.text)}</div><small>${esc(r.date||'')}</small><br>${r.approved?'':'<button class="pink" onclick="approveReview('+i+')">✅ تأیید و نمایش</button> '}<button class="danger" onclick="deleteReview('+i+')">🗑️ حذف</button></div>`).join(''):'هنوز نظری ثبت نشده است.'}
+function approveReview(i){if(!reviews[i])return;reviews[i].approved=true;persist();renderReviews();renderReviewModeration();}
+function deleteReview(i){if(!reviews[i])return;if(!confirm('این نظر حذف شود؟'))return;reviews.splice(i,1);persist();renderReviews();renderReviewModeration();}
+async function checkout(){if(!user)return alert('برای ثبت سفارش ابتدا ثبت‌نام یا وارد حساب شوید.');let ks=Object.keys(cart).filter(k=>cart[k]&&products[k]&&products[k].available);if(!ks.length)return alert('سبد خرید خالی است.');let items=ks.map(k=>({name:products[k].name,quantity:cart[k],price:Number(products[k].price)||0})),lines=ks.map(k=>`${products[k].name} × ${cart[k]}`).join('\n'),total=ks.reduce((s,k)=>s+products[k].price*cart[k],0),msg=`سلام، سفارش جدید از PANAH ACCSESORIES\nنام: ${user.name}\n${lines}\nمبلغ: ${money(total)} تومان`;let ch=document.getElementById('orderChannel')?.value||'whatsapp';let url='';if(ch==='whatsapp'&&contacts.wa){url=`https://wa.me/${contacts.wa.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`;}else if(ch==='telegram'&&contacts.tg){let tg=contacts.tg.trim().replace(/^@/,'');url=`https://t.me/${tg}`;}else if(ch==='rubika'&&contacts.rb){let rb=contacts.rb.trim().replace(/^@/,'').replace(/^https?:\/\/rubika\.ir\//,'');url=`https://rubika.ir/${rb}`;}else{return alert('آیدی/شماره این روش در پنل مدیریت تنظیم نشده است.');}try{await fetch(SUPABASE_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({customer_name:user.name,customer_phone:user.phone||'',items,total,status:'pending'})});}catch(e){console.warn('ثبت سفارش در Supabase انجام نشد:',e);}localStorage.setItem('lastOrderMessage',msg);window.location.href=url;}
+
+async function ownerLogin(){
+  const email=document.getElementById('ownerEmail').value.trim();
+  const password=document.getElementById('ownerPassword').value;
+  if(!email||!password)return alert('ایمیل و رمز مالک را وارد کنید.');
+  try{
+    const res=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=password',{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.error_description||data.msg||'ورود ناموفق بود.');
+    const token=data.access_token||'', uid=data.user?.id||'';
+    if(!token||!uid)throw new Error('اطلاعات حساب مالک دریافت نشد.');
+    const rows=await fetch(SUPABASE_URL+'/rest/v1/site_owners?select=user_id&user_id=eq.'+encodeURIComponent(uid),{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+token}}).then(async r=>{if(!r.ok)throw new Error(await r.text());return r.json()});
+    if(!Array.isArray(rows)||!rows.length)return alert('این حساب مالک سایت نیست.');
+    ownerAccessToken=token;ownerUserId=uid;
+    localStorage.setItem('panahOwnerAccessToken',token);localStorage.setItem('panahOwnerUserId',uid);
+    document.getElementById('ownerLogin').style.display='none';document.getElementById('ownerArea').style.display='block';
+    await loadManagerList();
+    alert('ورود مالک با موفقیت انجام شد ✅');
+  }catch(e){console.error(e);alert('ورود مالک انجام نشد: '+e.message)}
+}
+
+async function loadManagerList(){
+  if(!ownerAccessToken)return;
+  try{
+    const rows=await fetch(SUPABASE_URL+'/rest/v1/admin_users?select=user_id&order=user_id.asc',{headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+ownerAccessToken}}).then(async r=>{if(!r.ok)throw new Error(await r.text());return r.json()});
+    const box=document.getElementById('managerList');
+    box.innerHTML=rows.length?rows.map(r=>`<div class="editItem"><b>👤 ${esc(r.user_id)}</b> ${r.user_id===ownerUserId?'⭐ مالک':''}<br>${r.user_id!==ownerUserId?`<button class="danger" onclick="removeManager('${r.user_id}')">حذف دسترسی مدیر</button>`:''}</div>`).join(''):'مدیری ثبت نشده است.';
+  }catch(e){document.getElementById('managerList').textContent='دریافت مدیران انجام نشد.';console.error(e)}
+}
+
+async function createManager(){
+  if(!ownerAccessToken)return alert('ابتدا وارد بخش مالک سایت شوید.');
+  const email=document.getElementById('newManagerEmail').value.trim();
+  const password=document.getElementById('newManagerPassword').value;
+  if(!email||!password)return alert('ایمیل و رمز مدیر را وارد کنید.');
+  if(password.length<6)return alert('رمز مدیر باید حداقل ۶ کاراکتر باشد.');
+  try{
+    const res=await fetch(SUPABASE_URL+'/auth/v1/signup',{method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.msg||data.error_description||'ساخت حساب انجام نشد.');
+    const uid=data.user?.id;
+    if(!uid)throw new Error('شناسه مدیر جدید دریافت نشد.');
+    const add=await fetch(SUPABASE_URL+'/rest/v1/admin_users',{method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+ownerAccessToken,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({user_id:uid})});
+    if(!add.ok){const t=await add.text();throw new Error(t)}
+    document.getElementById('newManagerEmail').value='';document.getElementById('newManagerPassword').value='';
+    await loadManagerList();
+    alert('مدیر ساخته شد و دسترسی مدیریت گرفت ✅'+(data.session?'':'\nاگر تأیید ایمیل در Supabase فعال باشد، مدیر باید ایمیلش را تأیید کند.'));
+  }catch(e){console.error(e);alert('ساخت مدیر انجام نشد: '+e.message)}
+}
+
+async function removeManager(uid){
+  if(!ownerAccessToken||uid===ownerUserId)return;
+  if(!confirm('دسترسی این مدیر حذف شود؟'))return;
+  try{
+    const r=await fetch(SUPABASE_URL+'/rest/v1/admin_users?user_id=eq.'+encodeURIComponent(uid),{method:'DELETE',headers:{'apikey':SUPABASE_KEY,'Authorization':'Bearer '+ownerAccessToken}});
+    if(!r.ok)throw new Error(await r.text());
+    await loadManagerList();alert('دسترسی مدیر حذف شد ✅');
+  }catch(e){alert('حذف دسترسی انجام نشد: '+e.message)}
+}
+
+function ownerLogout(){ownerAccessToken='';ownerUserId='';localStorage.removeItem('panahOwnerAccessToken');localStorage.removeItem('panahOwnerUserId');document.getElementById('ownerLogin').style.display='block';document.getElementById('ownerArea').style.display='none';document.getElementById('ownerPassword').value='';}
+
+async function managerLogin(){
+  const email=document.getElementById('managerEmail').value.trim();
+  const password=document.getElementById('managerPassword').value;
+  if(!email||!password)return alert('ایمیل و رمز عبور را وارد کنید.');
+  try{
+    const res=await fetch(SUPABASE_URL+'/auth/v1/token?grant_type=password',{
+      method:'POST',headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({email,password})
+    });
+    const data=await res.json();
+    if(!res.ok)throw new Error(data.error_description||data.msg||'ورود ناموفق بود.');
+    adminAccessToken=data.access_token||'';
+    adminUserId=data.user?.id||'';
+    if(!adminAccessToken||!adminUserId)throw new Error('اطلاعات حساب مدیر دریافت نشد.');
+    const rows=await sbFetch('admin_users?select=user_id&user_id=eq.'+encodeURIComponent(adminUserId),{method:'GET'});
+    if(!Array.isArray(rows)||!rows.length){adminAccessToken='';adminUserId='';return alert('این حساب در لیست مدیران ثبت نشده است.');}
+    localStorage.setItem('panahAdminAccessToken',adminAccessToken);
+    localStorage.setItem('panahAdminUserId',adminUserId);
+    document.getElementById('managerLogin').style.display='none';
+    document.getElementById('managerArea').style.display='block';
+    await loadAdminReviews();
+    await loadAdminOrders();
+    await loadProductsFromSupabase();
+    await loadStoreSettingsFromSupabase();
+    alert('ورود مدیر با موفقیت انجام شد ✅');
+  }catch(e){console.error(e);alert('ورود مدیر انجام نشد: '+e.message);}
+}
+
+function managerLogout(){
+  adminAccessToken='';adminUserId='';
+  localStorage.removeItem('panahAdminAccessToken');localStorage.removeItem('panahAdminUserId');
+  document.getElementById('managerLogin').style.display='block';
+  document.getElementById('managerArea').style.display='none';
+  document.getElementById('managerPassword').value='';
+}
+
+async function loadAdminReviews(){
+  if(!adminAccessToken)return;
+  try{
+    const rows=await sbFetch('reviews?select=id,customer_name,rating,comment,approved,created_at&order=id.desc',{method:'GET'});
+    const box=document.getElementById('reviewModeration');
+    box.innerHTML=rows.length?rows.map(r=>`<div class="editItem"><b>${esc(r.customer_name)}</b> ⭐ ${r.rating} ${r.approved?'🟢 نمایش':'🟡 در انتظار'}<div style="margin:8px 0">${esc(r.comment||'')}</div><small>${esc(r.created_at||'')}</small><br>${r.approved?'':'<button class="pink" onclick="approveRemoteReview('+r.id+')">✅ تأیید</button> '}<button class="danger" onclick="deleteRemoteReview('+r.id+')">🗑️ حذف</button></div>`).join(''):'هنوز نظری ثبت نشده است.';
+  }catch(e){document.getElementById('reviewModeration').textContent='دریافت نظرات انجام نشد.';console.error(e)}
+}
+async function approveRemoteReview(id){try{await sbFetch('reviews?id=eq.'+id,{method:'PATCH',body:JSON.stringify({approved:true})});await loadAdminReviews();alert('نظر تأیید شد ✅')}catch(e){alert('تأیید نظر انجام نشد.')}}
+async function deleteRemoteReview(id){if(!confirm('این نظر حذف شود؟'))return;try{await sbFetch('reviews?id=eq.'+id,{method:'DELETE'});await loadAdminReviews();alert('نظر حذف شد ✅')}catch(e){alert('حذف نظر انجام نشد.')}}
+async function loadAdminOrders(){
+  if(!adminAccessToken)return;
+  try{
+    const rows=await sbFetch('orders?select=id,customer_name,customer_phone,items,total,status,created_at&order=id.desc',{method:'GET'});
+    const box=document.getElementById('ordersAdmin');
+    box.innerHTML=rows.length?rows.map(o=>`<div class="editItem"><b>سفارش #${o.id}</b><br>👤 ${esc(o.customer_name)}<br>📞 ${esc(o.customer_phone||'')}<br>💰 ${money(o.total)} تومان<br>📦 ${esc(o.status)}<br><small>${esc(o.created_at||'')}</small></div>`).join(''):'هنوز سفارشی ثبت نشده است.';
+  }catch(e){document.getElementById('ordersAdmin').textContent='دریافت سفارش‌ها انجام نشد.';console.error(e)}
+}
+
+async function syncOneProductToSupabase(p){
+  if(!adminAccessToken)throw new Error('ابتدا وارد پنل مدیر شوید.');
+  const body={name:p.name,price:Number(p.price)||0,description:p.desc||'',image_url:p.img||'',stock:!!p.available};
+  if(p.id) await sbFetch('products?id=eq.'+encodeURIComponent(p.id),{method:'PATCH',body:JSON.stringify(body)});
+  else {
+    const created=await sbFetch('products',{method:'POST',body:JSON.stringify(body)});
+    if(Array.isArray(created)&&created[0]) p.id=created[0].id;
+  }
+}
+
+async function updateProduct(i){
+  const oldId=products[i]?.id;
+  products[i]={id:oldId,name:document.getElementById('en'+i).value,price:Number(document.getElementById('ep'+i).value)||0,desc:document.getElementById('ed'+i).value,img:document.getElementById('ei'+i).value,available:document.getElementById('ea'+i).value==='1'};
+  persist();
+  try{await syncOneProductToSupabase(products[i]);persist();adminFormDirty=false;alert('محصول در سایت و Supabase ذخیره شد ✅');}catch(e){alert('محلی ذخیره شد، ولی ذخیره در Supabase انجام نشد: '+e.message)}
+  render();
+}
+async function addProduct(){
+  products.push({name:'محصول جدید',price:0,desc:'توضیحات محصول',img:'https://via.placeholder.com/700',available:true});
+  persist();render();
+  if(adminAccessToken){try{await syncOneProductToSupabase(products[products.length-1]);alert('محصول جدید اضافه شد و در Supabase ذخیره شد ✅')}catch(e){alert('محصول محلی اضافه شد؛ ذخیره Supabase ناموفق بود.')}}
+}
+async function delProduct(i){
+  const p=products[i]; if(!confirm('این محصول حذف شود؟'))return;
+  try{
+    if(adminAccessToken && p.id) await sbFetch('products?id=eq.'+encodeURIComponent(p.id),{method:'DELETE'});
+    products.splice(i,1);persist();render();alert('محصول حذف شد ✅');
+  }catch(e){alert('حذف از Supabase انجام نشد: '+e.message)}
+}
+async function saveStore(){
+  const name=document.getElementById('storeName').value.trim();
+  const tag=document.getElementById('storeTag').value.trim();
+  localStorage.panahStoreName=name;localStorage.panahStoreTag=tag;persist();
+  try{if(adminAccessToken)await sbFetch('store_settings?id=eq.1',{method:'PATCH',body:JSON.stringify({store_name:name,tagline:tag,updated_at:new Date().toISOString()})});adminFormDirty=false;alert('اطلاعات فروشگاه ذخیره شد ✅')}catch(e){alert('محلی ذخیره شد؛ ذخیره Supabase ناموفق بود.')}
+}
+async function saveContacts(){
+  contacts={wa:document.getElementById('wa').value.trim(),tg:document.getElementById('tg').value.trim().replace('@',''),rb:document.getElementById('rb').value.trim().replace('@','')};persist();
+  try{if(adminAccessToken)await sbFetch('store_settings?id=eq.1',{method:'PATCH',body:JSON.stringify({whatsapp:contacts.wa,telegram:contacts.tg,rubika:contacts.rb,updated_at:new Date().toISOString()})});alert('راه‌های سفارش ذخیره شد ✅')}catch(e){alert('محلی ذخیره شد؛ ذخیره Supabase ناموفق بود.')}
+}
+
+render();
+loadPublicStoreSettingsFromSupabase();
+loadProductsFromSupabase();
+if(adminAccessToken&&adminUserId){ loadStoreSettingsFromSupabase(); }
+
+// همگام‌سازی خودکار: تغییرات پنل مدیریت حداکثر تا ۱۰ ثانیه برای کاربران بازِ سایت نمایش داده می‌شود.
+setInterval(async ()=>{
+  // هنگام تایپ/ویرایش محصول، فرم را دوباره render نکن تا نوشته‌های مدیر نپرند.
+  if(adminFormDirty) return;
+  await loadPublicStoreSettingsFromSupabase();
+  await loadProductsFromSupabase(true);
+},10000);
+
+if(adminAccessToken&&adminUserId){ loadStoreSettingsFromSupabase(); }
+if(ownerAccessToken&&ownerUserId){ document.getElementById('ownerLogin').style.display='none';document.getElementById('ownerArea').style.display='block';loadManagerList(); }
+</script><script>
+// پنل‌های مالک و مدیریت عمداً از منوی عمومی مخفی هستند.
+// دسترسی: آدرس سایت + ?owner برای مالک، یا ?manager برای مدیر.
+(function(){
+  const q=new URLSearchParams(location.search);
+  if(q.has('owner')){ const e=document.getElementById('ownerPanel'); if(e)e.style.display='block'; }
+  if(q.has('manager')){ const e=document.getElementById('managerPanel'); if(e)e.style.display='block'; }
+})();
+</script>
+</body></html>
